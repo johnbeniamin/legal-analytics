@@ -1,9 +1,8 @@
 from collections import Counter
 from nltk import ngrams
+import pandas as pd  # استدعينا وحش البيانات
 
 # === إعدادات التحكم ===
-# دي النسبة المئوية اللي هنعتبر الكلمة بعدها "مهمة"
-# 0.1% تعني: الكلمة لازم تظهر مرة واحدة على الأقل في كل 1000 كلمة
 MIN_PERCENTAGE = 0.1 
 
 # 1. قراءة الملف
@@ -11,7 +10,7 @@ with open('data.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 
 # 2. القائمة السوداء
-stop_words = ["في", "من", "على", "أن", "أو", "هذا", "هذه", "تم", "التي", "الذي", "عن", "كان", "لها", "ذلك", "فى", "و", "بها", "لا", "إلى", "ما", "مع", "كل"]
+stop_words = ["في", "من", "على", "أن", "أو", "هذا", "هذه", "تم", "التي", "الذي", "عن", "كان", "لها", "ذلك", "فى", "و", "بها", "لا", "إلى", "ما", "مع", "كل", "أنه"]
 
 # 3. التنظيف
 text = text.replace("،", " ")
@@ -21,34 +20,39 @@ text = text.replace("-", " ")
 text = text.replace(".", " ")
 text = text.replace(":", " ")
 text = text.replace("\n", " ")
+text = text.replace('"', " ")
 
 # 4. التقطيع والفلترة
-all_words_raw = text.split() # كل الكلمات قبل الفلترة (عشان نحسب النسبة الصح)
-total_count = len(all_words_raw) # العدد الإجمالي (مثلاً 13000)
-
+all_words_raw = text.split()
+total_count = len(all_words_raw)
 clean_words = [word for word in all_words_raw if word not in stop_words]
 
-# 5. الحسابات
+# 5. الحسابات (الكلمات الفردية)
 word_count = Counter(clean_words)
-
-# === المعادلة الذكية ===
-# هنا هنحسب النسبة المئوية لكل كلمة ونفلتر بناء عليها
 analyzed_data = []
 
 for word, freq in word_count.most_common():
-    percentage = (freq / total_count) * 100 # معادلة النسبة المئوية
-    
-    # الشرط: لو نسبة الكلمة أكبر من الحد الأدنى اللي حطيناه فوق
+    percentage = (freq / total_count) * 100
     if percentage >= MIN_PERCENTAGE:
-        analyzed_data.append((word, freq, percentage))
+        analyzed_data.append({"العبارة": word, "التكرار": freq, "النوع": "كلمة فردية", "النسبة": f"{percentage:.2f}%"})
 
-# الطباعة بشكل جدول شيك
-print(f"--- تقرير تحليل النص ---")
-print(f"إجمالي عدد كلمات الملف: {total_count} كلمة")
-print(f"عدد الكلمات المميزة (بدون تكرار): {len(word_count)}")
-print("-" * 50)
-print(f"{'الكلمة':<15} | {'التكرار':<10} | {'النسبة المئوية'}")
-print("-" * 50)
+# 6. الحسابات (العبارات المركبة)
+grams = ngrams(clean_words, 2)
+phrases = [" ".join(gram) for gram in grams]
+phrase_count = Counter(phrases)
 
-for word, freq, pct in analyzed_data[:30]: # عرض أهم 30 نتيجة
-    print(f"{word:<15} | {freq:<10} | {pct:.2f}%")
+for phrase, freq in phrase_count.most_common():
+    if freq >= 2: # شرط بسيط للعبارات
+        percentage = (freq / total_count) * 100
+        analyzed_data.append({"العبارة": phrase, "التكرار": freq, "النوع": "عبارة مركبة", "النسبة": f"{percentage:.2f}%"})
+
+# === 7. التصدير للإكسل (الجزء الجديد) ===
+# تحويل القائمة لجدول بيانات
+df = pd.read_json(pd.Series(analyzed_data).to_json(orient='values'))
+
+# حفظ الملف
+output_filename = "legal_report.xlsx"
+df.to_excel(output_filename, index=False)
+
+print(f"تم إنشاء التقرير بنجاح: {output_filename}")
+print(f"إجمالي النتائج المستخرجة: {len(analyzed_data)}")
